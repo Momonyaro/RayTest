@@ -8,6 +8,7 @@
 #define V_PIXEL_RES 360
 
 #define DEG_TO_RAD 0.0174532925f
+#define PI 3.141592653f
 
 // Override base class with your custom functionality
 class Example : public olc::PixelGameEngine
@@ -28,27 +29,40 @@ public:
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-		if (GetKey(olc::Key::D).bPressed)
-			horScreenSplit = horScreenSplit + 0.08f;
-		if (GetKey(olc::Key::A).bPressed)
-			horScreenSplit = horScreenSplit - 0.08f;
-		if (GetKey(olc::Key::Q).bHeld)
-			fPlayerA = fPlayerA + (50.f * fElapsedTime);
-		if (GetKey(olc::Key::E).bHeld)
-			fPlayerA = fPlayerA - (50.f * fElapsedTime);
+		if (GetKey(olc::Key::D).bHeld)
+		{
+			fPlayerA = fPlayerA + (100.f * fElapsedTime);
+			if (fPlayerA >= 360.0f) fPlayerA = fPlayerA - 360.0f;
+		}
+		if (GetKey(olc::Key::A).bHeld)
+		{
+			fPlayerA = fPlayerA - (100.f * fElapsedTime);
+			if (fPlayerA < 0.0f) fPlayerA = 360.0f + fPlayerA;
+		}
+
+		fPlayerDX = cos(fPlayerA * DEG_TO_RAD) * 4.f;
+		fPlayerDY = sin(fPlayerA * DEG_TO_RAD) * 4.f;
+		if (GetKey(olc::Key::W).bHeld)
+		{
+			fPlayerX += fPlayerDX * fElapsedTime;
+			fPlayerY += fPlayerDY * fElapsedTime;
+		}
+		if (GetKey(olc::Key::S).bHeld)
+		{
+			fPlayerX -= fPlayerDX * fElapsedTime;
+			fPlayerY -= fPlayerDY * fElapsedTime;
+		}
 
 		if (horScreenSplit >= 1.0f) horScreenSplit = 1.0f;
 		else if (horScreenSplit <= 0.0f) horScreenSplit = 0.0f;
 
-		if (fPlayerA >= 360.0f) fPlayerA = fPlayerA - 360.0f;
-		else if (fPlayerA < 0.0f) fPlayerA = 360.0f + fPlayerA;
-
 		Clear(olc::BLACK);
+		int boxSize = ScreenWidth() - (ScreenWidth() * horScreenSplit);
+		boxSize /= mWidth;
+		int vBoxOri = ScreenHeight() - (boxSize * mHeight);
 
 		// This is where we later render the actual raycasting section
-		/*for (int x = 0; x < ScreenWidth() * horScreenSplit; x++)
-			for (int y = 0; y < ScreenHeight(); y++)
-				Draw(x, y, olc::Pixel(rand() % 256, rand() % 256, rand() % 256));*/
+		DrawRaycasting(vBoxOri, boxSize);
 
 		DrawStringDecal({ H_PIXEL_RES * horScreenSplit + 25, 25 }, "Delta Time: " + std::to_string(fElapsedTime), olc::WHITE, { 1.f, 1.f });
 		DrawStringDecal({ H_PIXEL_RES * horScreenSplit + 25, 40 }, "FPS: " + std::to_string(GetFPS()), olc::WHITE, { 1.f, 1.f });
@@ -56,9 +70,8 @@ public:
 		DrawStringDecal({ H_PIXEL_RES * horScreenSplit + 25, 75 }, "* Player Rot: " + std::to_string((int)fPlayerA), olc::DARK_GREEN, { 1.f, 1.f });
 		DrawStringDecal({ H_PIXEL_RES * horScreenSplit + 25, 90 }, "* X: " + std::to_string((int)fPlayerX) + ", Y: " + std::to_string((int)fPlayerY), olc::DARK_GREEN, { 1.f, 1.f });
 
-		int boxSize = ScreenWidth() - (ScreenWidth() * horScreenSplit);
-		boxSize /= mWidth;
-		int vBoxOri = ScreenHeight() - (boxSize * mHeight);
+		olc::vi2d l1 = {};
+		olc::vi2d l2 = {};
 
 		for (int x = 0; x < mWidth; x++)
 			for (int y = 0; y < mHeight; y++)
@@ -68,20 +81,86 @@ public:
 				if (x == (int)fPlayerX && y == (int)fPlayerY)
 				{
 					DrawRect({ vPos.x + 1, vPos.y + 1 }, { boxSize - 3, boxSize - 3 }, olc::DARK_GREEN);
-					DrawLine({ vPos.x + (int)(boxSize * (fPlayerX - x)), vPos.y + (int)(boxSize * (fPlayerY - y)) },
-						     { vPos.x + (int)(cos(fPlayerA * DEG_TO_RAD) * boxSize) + (int)(boxSize * (fPlayerX - x)), vPos.y + (int)(sin(fPlayerA * DEG_TO_RAD) * boxSize) + (int)(boxSize * (fPlayerY - y)) });
-					std::cout << "deltaX: " << (fPlayerX - x) << ", deltaY: " << (fPlayerY - y) << std::endl;
+					l1 = { vPos.x + (int)(boxSize * (fPlayerX - x)), vPos.y + (int)(boxSize * (fPlayerY - y)) };
+					l2 = { vPos.x + (int)(cos(fPlayerA * DEG_TO_RAD) * boxSize) + (int)(boxSize * (fPlayerX - x)), vPos.y + (int)(sin(fPlayerA * DEG_TO_RAD) * boxSize) + (int)(boxSize * (fPlayerY - y)) };
+					//std::cout << "deltaX: " << (fPlayerX - x) << ", deltaY: " << (fPlayerY - y) << std::endl;
 				}
 			}
+
+		DrawLine(l1, l2);
 
 		return true;
 	}
 
 private:
+
+	float Distance(olc::vf2d a, olc::vf2d b)
+	{
+		float dx = a.x - b.x;
+		float dy = a.y - b.y;
+		return sqrtf(dx * dx + dy * dy);
+	}
+	
+	void DrawRaycasting(int vBoxOri, int boxSize)
+	{
+		//From the tile we're currently at, can we travel along the player rotation to see if we intersect a wall?
+		//Since we're using a unit size of 1 we can probably use that as our advantage and simply take 1 unit- 
+		//- steps until we either reach max draw distance or end up in a tile that holds a wall?
+		
+		//We could theoretically check if the tile the ray is currently travelling through is not a empty space (tile != 0)
+		//If it isn't we check the rotation to see if we should floor the X or Y axis, then we remove the delta of the other axis using trigonomety from the axis we floored.
+		//This should give us an accurate point along the edge of the tile so that we can correctly draw a line for it in the raycasted view.
+
+		float r = 0;
+		float rDist = 0;
+		float rX = 0, rY = 0;
+		bool hitWall = false;
+		for (r = fPlayerA - fHalfFov; r < fPlayerA + fHalfFov; r++)
+		{
+			hitWall = false;
+			rDist = 0;
+			rX = fPlayerX; rY = fPlayerY;
+			int vDir = (r >= 0 && r <= 180) ? -1 : 1; //1 = up, -1 = down
+			int hDir = (r <= 90 || r >= 270) ? 1 : -1; //1 = right, -1 = left
+
+			while (fDrawDist > rDist)
+			{
+				rX += cos(r * DEG_TO_RAD) * 0.1f;	//Walk a small unit
+				rY += sin(r * DEG_TO_RAD) * 0.1f;
+
+				rDist = Distance({ fPlayerX, fPlayerY }, { rX, rY });
+
+				if (rX < 0 || rX >= mWidth || rY < 0 || rY >= mHeight) { std::cout << "Ray went out of bounds, x:" << rX << " y:" << rY << " d:" << rDist << std::endl; break; }
+				if (mData[(int)floorf(rY) * mWidth + (int)floorf(rX)] != 0)
+				{
+					//Collided with a wall, let's smooth it out?
+					rX = roundf(rX);
+					rY = roundf(rY);
+					hitWall = true;
+					break;
+				}
+				
+			}
+
+			int hBoxOri = H_PIXEL_RES * H_SCREEN_SPLIT;
+
+			DrawLine({ hBoxOri + (int)(fPlayerX * boxSize), vBoxOri + (int)(fPlayerY * boxSize) }, { hBoxOri + (int)(rX * boxSize), vBoxOri + (int)(rY * boxSize) }, olc::RED);
+			float wallHeight = 150 / rDist;
+			if (hitWall)
+				DrawRect({ (int)((r - fPlayerA) + fHalfFov) * (int)fPixelBlockW, V_PIXEL_RES / 2 - (int)wallHeight / 2 }, { (int)fPixelBlockW - 1, (int)wallHeight });
+			// Draw the shortest ray
+		}
+
+	}
+
 	float horScreenSplit = H_SCREEN_SPLIT;
 	int mWidth = 10, mHeight = 10;
 	float fPlayerX = 7.5f, fPlayerY = 2.5f;
-	float fPlayerA = 90.0f;
+	float fPlayerDX = 0.f, fPlayerDY = 0.f;
+	float fPlayerA = 90.f;
+	float fDrawDist = 8.0f;
+	float fHalfFov = 42.0f;
+	float fPixelBlockW = 5.0f; // How wide a column is in the FPS view.
 	std::vector<int> mData = 
 	{
 		1,1,1,1,1,1,1,1,1,1,
