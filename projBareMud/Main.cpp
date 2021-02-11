@@ -31,12 +31,12 @@ public:
 	{
 		if (GetKey(olc::Key::D).bHeld)
 		{
-			fPlayerA = fPlayerA + (100.f * fElapsedTime);
+			fPlayerA = fPlayerA + (150.f * fElapsedTime);
 			if (fPlayerA >= 360.0f) fPlayerA = fPlayerA - 360.0f;
 		}
 		if (GetKey(olc::Key::A).bHeld)
 		{
-			fPlayerA = fPlayerA - (100.f * fElapsedTime);
+			fPlayerA = fPlayerA - (150.f * fElapsedTime);
 			if (fPlayerA < 0.0f) fPlayerA = 360.0f + fPlayerA;
 		}
 
@@ -103,13 +103,6 @@ private:
 	
 	void DrawRaycasting(int vBoxOri, int boxSize)
 	{
-		//From the tile we're currently at, can we travel along the player rotation to see if we intersect a wall?
-		//Since we're using a unit size of 1 we can probably use that as our advantage and simply take 1 unit- 
-		//- steps until we either reach max draw distance or end up in a tile that holds a wall?
-		
-		//We could theoretically check if the tile the ray is currently travelling through is not a empty space (tile != 0)
-		//If it isn't we check the rotation to see if we should floor the X or Y axis, then we remove the delta of the other axis using trigonomety from the axis we floored.
-		//This should give us an accurate point along the edge of the tile so that we can correctly draw a line for it in the raycasted view.
 
 		float r = 0;
 		float rDist = 0;
@@ -134,8 +127,8 @@ private:
 				if (mData[(int)floorf(rY) * mWidth + (int)floorf(rX)] != 0)
 				{
 					//Collided with a wall, let's smooth it out?
-					rX = roundf(rX);
-					rY = roundf(rY);
+					// How would we do this, we have the shortest delta for both axis but that doen't say at what angle we hit the wall
+
 					hitWall = true;
 					break;
 				}
@@ -147,39 +140,70 @@ private:
 			DrawLine({ hBoxOri + (int)(fPlayerX * boxSize), vBoxOri + (int)(fPlayerY * boxSize) }, { hBoxOri + (int)(rX * boxSize), vBoxOri + (int)(rY * boxSize) }, olc::RED);
 			float wallHeight = 150 / rDist;
 			if (hitWall)
-				DrawRect({ (int)((r - fPlayerA) + fHalfFov) * (int)fPixelBlockW, V_PIXEL_RES / 2 - (int)wallHeight / 2 }, { (int)fPixelBlockW - 1, (int)wallHeight });
+			{
+				olc::Pixel columnCol = olc::BLACK;
+
+				if (rDist / fDrawDist < 0.35f)
+				{ columnCol = olc::WHITE; }
+				else if (rDist / fDrawDist < 0.55f )
+				{ columnCol = olc::GREY; }
+				else if (rDist / fDrawDist < 0.8f )
+				{ columnCol = olc::DARK_GREY; }
+
+				DrawRect({ (int)((r - fPlayerA) + fHalfFov) * (int)fPixelBlockW, V_PIXEL_RES / 2 - (int)wallHeight / 2 }, { (int)fPixelBlockW - 1, (int)wallHeight }, columnCol);
+			}
 			// Draw the shortest ray
 		}
 
 	}
 
 	float horScreenSplit = H_SCREEN_SPLIT;
-	int mWidth = 10, mHeight = 10;
-	float fPlayerX = 7.5f, fPlayerY = 2.5f;
+	int mWidth = 25, mHeight = 30;
+	float fPlayerX = 2.5f, fPlayerY = 2.5f;
 	float fPlayerDX = 0.f, fPlayerDY = 0.f;
-	float fPlayerA = 90.f;
-	float fDrawDist = 8.0f;
+	float fPlayerA = 0.f;
+	float fDrawDist = 6.0f;
 	float fHalfFov = 42.0f;
 	float fPixelBlockW = 5.0f; // How wide a column is in the FPS view.
 	std::vector<int> mData = 
 	{
-		1,1,1,1,1,1,1,1,1,1,
-		1,0,0,0,1,0,0,0,0,1,
-		1,0,0,0,0,0,0,0,0,1,
-		1,0,0,0,1,0,0,0,0,1,
-		1,0,0,0,1,1,1,0,1,1,
-		1,0,0,0,0,0,0,0,0,1,
-		1,0,0,0,0,1,0,0,0,1,
-		1,0,0,0,0,1,1,0,0,1,
-		1,0,0,0,0,0,0,0,0,1,
-		1,1,1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+		1,0,0,0,0,1,1,1,1,1,0,0,0,1,1,0,0,0,1,1,0,0,0,0,1,
+		1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+		1,0,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,1,0,0,0,0,1,
+		1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,1,0,0,0,1,1,1,1,1,1,0,1,1,
+		1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,1,0,0,0,1,0,0,0,1,1,1,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+		1,1,1,1,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+		1,1,1,1,0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,
+		1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1,
+		1,1,1,0,1,0,0,0,1,0,1,1,0,1,0,1,0,1,0,1,1,1,1,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,1,1,1,1,1,1,
+		1,1,1,0,1,0,0,0,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,
+		1,1,1,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,0,0,0,1,1,1,1,
+		1,1,1,0,1,0,0,0,1,0,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,0,0,0,1,1,1,1,
+		1,1,1,0,1,0,0,0,1,0,1,1,1,1,0,1,0,0,0,0,0,1,1,1,1,
+		1,1,1,0,0,0,0,0,0,0,1,1,1,1,0,1,0,0,0,0,1,1,1,1,1,
+		1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,0,0,0,1,1,1,1,1,
+		1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,0,1,1,1,1,1,
+		1,1,1,0,0,0,0,1,1,1,1,1,1,0,0,0,1,1,1,0,1,1,1,1,1,
+		1,1,1,0,1,1,1,1,1,1,1,1,1,0,0,0,1,1,1,0,1,1,1,1,1,
+		1,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,0,0,0,0,1,
+		1,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,1,
+		1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,
+		1,0,0,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,0,0,0,0,0,0,1,
+		1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
 	};
 };
 
 int main()
 {
 	Example demo;
-	if (demo.Construct(H_PIXEL_RES, V_PIXEL_RES, 2, 2, false, true, true))
+	if (demo.Construct(H_PIXEL_RES, V_PIXEL_RES, 2, 2, true, true, true))
 		demo.Start();
 	return 0;
 }
